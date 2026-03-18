@@ -28,6 +28,25 @@ import {
   withThinking
 } from "../ui/tui.js";
 
+const MAX_HISTORY_TURNS = 40;
+
+function trimHistory(history: ChatMessage[]): void {
+  // Keep system message (index 0) + last MAX_HISTORY_TURNS user/assistant pairs
+  const systemMsg = history[0];
+  if (!systemMsg) {
+    return;
+  }
+  const rest = history.slice(1);
+  if (rest.length > MAX_HISTORY_TURNS * 2) {
+    history.splice(1, rest.length - MAX_HISTORY_TURNS * 2);
+    history[0] = systemMsg;
+    renderMutedInfo(
+      `Session history trimmed to ${MAX_HISTORY_TURNS} turns to stay within context limits.`
+    );
+    console.log("");
+  }
+}
+
 export async function startChat(cwd: string): Promise<void> {
   let { config } = await loadConfigWithAutoFix();
   let contextRoot = cwd;
@@ -114,7 +133,12 @@ export async function startChat(cwd: string): Promise<void> {
     }, {
       runPromptSession,
       applyLiveConfig,
-      reloadRepositoryContext
+      reloadRepositoryContext,
+      clearHistory: () => {
+        history.splice(1);
+        renderMutedInfo("Session history cleared.");
+        console.log("");
+      }
     });
 
     if (commandResult.handled) {
@@ -164,6 +188,7 @@ export async function startChat(cwd: string): Promise<void> {
         })
       );
       history.push({ role: "assistant", content: result.text });
+      trimHistory(history);
       if (showThinking && result.thinking) {
         renderThinkingPanel(result.thinking);
       }

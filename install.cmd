@@ -1,4 +1,2 @@
 @echo off
-setlocal
-powershell -ExecutionPolicy Bypass -File "%~dp0scripts\install.ps1" %*
-endlocal
+call "%~dp0install.bat" %*

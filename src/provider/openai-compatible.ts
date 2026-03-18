@@ -42,6 +42,36 @@ function createHeaders(config: AppConfig): Record<string, string> {
   return headers;
 }
 
+const MAX_RETRY_ATTEMPTS = 4;
+const BASE_BACKOFF_MS = 500;
+const MAX_BACKOFF_MS = 30_000;
+const MAX_TOOL_LOOPS = 8;
+
+function backoffDelay(attempt: number, retryAfterMs?: number): number {
+  if (retryAfterMs && retryAfterMs > 0) {
+    return Math.min(retryAfterMs, MAX_BACKOFF_MS);
+  }
+  const base = BASE_BACKOFF_MS * Math.pow(2, attempt);
+  const jitter = Math.random() * base * 0.3;
+  return Math.min(base + jitter, MAX_BACKOFF_MS);
+}
+
+function parseRetryAfterMs(response: Response): number | undefined {
+  const header = response.headers.get("retry-after") ?? response.headers.get("x-ratelimit-reset-after");
+  if (!header) {
+    return undefined;
+  }
+  const seconds = parseFloat(header);
+  if (!isNaN(seconds)) {
+    return seconds * 1000;
+  }
+  const resetTime = new Date(header).getTime();
+  if (!isNaN(resetTime)) {
+    return Math.max(0, resetTime - Date.now());
+  }
+  return undefined;
+}
+
 async function postJson(
   config: AppConfig,
   endpoint: string,
@@ -50,37 +80,40 @@ async function postJson(
   const provider = activeProvider(config);
   const url = `${provider.baseURL.replace(/\/$/, "")}${endpoint}`;
 
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt += 1) {
+    let httpResponse: Response | undefined;
     try {
-      const response = await fetch(url, {
+      httpResponse = await fetch(url, {
         method: "POST",
         headers: createHeaders(config),
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(120000)
       });
 
-      if (!response.ok) {
-        const text = await response.text();
+      if (!httpResponse.ok) {
+        const text = await httpResponse.text();
         const details = classifyProviderFailure({
-          status: response.status,
-          statusText: response.statusText,
+          status: httpResponse.status,
+          statusText: httpResponse.statusText,
           body: text
         });
-        if (details.retryable && attempt < 2) {
-          await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+        if (details.retryable && attempt < MAX_RETRY_ATTEMPTS - 1) {
+          const delay = backoffDelay(attempt, parseRetryAfterMs(httpResponse));
+          await new Promise((resolve) => setTimeout(resolve, delay));
           continue;
         }
         throw new ProviderRequestError(details.title, details);
       }
 
-      return (await response.json()) as Record<string, unknown>;
+      return (await httpResponse.json()) as Record<string, unknown>;
     } catch (error) {
       if (error instanceof ProviderRequestError) {
         throw error;
       }
       const details = classifyProviderFailure({ error });
-      if (details.retryable && attempt < 2) {
-        await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+      if (details.retryable && attempt < MAX_RETRY_ATTEMPTS - 1) {
+        const delay = backoffDelay(attempt);
+        await new Promise((resolve) => setTimeout(resolve, delay));
         continue;
       }
       throw new ProviderRequestError(details.title, details);
@@ -273,7 +306,7 @@ async function runResponsesTurn(input: {
 
   let usedTools = false;
   let usage = extractUsage(response);
-  for (let loop = 0; loop < 8; loop += 1) {
+  for (let loop = 0; loop < MAX_TOOL_LOOPS; loop += 1) {
     const functionCalls = extractResponsesFunctionCalls(response);
     if (functionCalls.length === 0) {
       const text = extractResponsesText(response);
@@ -316,12 +349,17 @@ async function runResponsesTurn(input: {
     usage = mergeUsage(usage, extractUsage(response));
   }
 
-  return {
-    text: extractResponsesText(response),
-    usedTools,
-    thinking: extractResponsesThinking(response),
-    usage
-  };
+  throw new ProviderRequestError("Agent tool loop limit reached", {
+    kind: "server",
+    title: "Agent tool loop limit reached",
+    detail: `The agent made ${MAX_TOOL_LOOPS} tool calls without producing a final text response.`,
+    retryable: false,
+    suggestions: [
+      "Rephrase your request to be more specific.",
+      "Try switching to a different model or endpoint mode.",
+      "Use /doctor to check provider configuration."
+    ]
+  });
 }
 
 type ChatCompletionToolCall = {
@@ -400,7 +438,7 @@ async function runChatCompletionsTurn(input: {
   let usedTools = false;
   let usage: TokenUsage | undefined;
 
-  for (let loop = 0; loop < 8; loop += 1) {
+  for (let loop = 0; loop < MAX_TOOL_LOOPS; loop += 1) {
     let response: Record<string, unknown>;
     try {
       response = await postJson(input.config, "/chat/completions", {
@@ -486,7 +524,17 @@ async function runChatCompletionsTurn(input: {
     }
   }
 
-  return { text: "", usedTools, usage };
+  throw new ProviderRequestError("Agent tool loop limit reached", {
+    kind: "server",
+    title: "Agent tool loop limit reached",
+    detail: `The agent used tools for ${MAX_TOOL_LOOPS} consecutive turns without producing a final response.`,
+    retryable: false,
+    suggestions: [
+      "Rephrase your request to be more specific.",
+      "Try switching to a different model or endpoint mode.",
+      "Use /doctor to check provider configuration."
+    ]
+  });
 }
 
 export async function runAgentTurn(input: {

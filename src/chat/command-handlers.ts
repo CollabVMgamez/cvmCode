@@ -5,24 +5,25 @@ import { panel, renderChatIntro, renderCommandPalette, renderConfigPanel, render
 import { AppConfig, ProviderSettings, RepoSummary } from "../types.js";
 
 export const COMMAND_HINTS = [
-  "/help      show command help",
-  "/add-provider add a new provider",
-  "/clear     clear the screen and redraw the header",
-  "/config    show active config summary",
-  "/context   change context window or root directory",
-  "/doctor    show provider health info",
-  "/models    list models from the active provider",
-  "/model     change the active model",
-  "/provider  change the active provider",
-  "/endpoint  switch between responses and chat-completions",
+  "/help           show command help",
+  "/add-provider   add a new provider",
+  "/clear          clear the screen and redraw the header",
+  "/clear-history  clear the session message history",
+  "/config         show active config summary",
+  "/context        change context window or root directory",
+  "/doctor         show provider health info",
+  "/models         list models from the active provider",
+  "/model          change the active model",
+  "/provider       change the active provider",
+  "/endpoint       switch between responses and chat-completions",
   "/remove-provider remove a provider",
   "/rename-provider rename a provider",
-  "/baseurl   change active provider base URL",
-  "/apikey    change active provider auth mode",
-  "/headers   change active provider headers",
-  "/showthink show provider reasoning when available",
-  "/hidethink hide provider reasoning panels",
-  "/exit      quit cvmCode"
+  "/baseurl        change active provider base URL",
+  "/apikey         change active provider auth mode",
+  "/headers        change active provider headers",
+  "/showthink      show provider reasoning when available",
+  "/hidethink      hide provider reasoning panels",
+  "/exit           quit cvmCode"
 ];
 
 export type RunPromptSession = <T>(questions: T) => Promise<any>;
@@ -42,6 +43,7 @@ interface CommandHandlerDependencies {
   runPromptSession: RunPromptSession;
   applyLiveConfig: (nextConfig: AppConfig, notice: string) => void;
   reloadRepositoryContext: (notice: string) => Promise<void>;
+  clearHistory: () => void;
 }
 
 export interface CommandHandlerResult {
@@ -264,6 +266,12 @@ export async function handleSlashCommand(
     renderMutedInfo("Provider reasoning panels hidden.");
     console.log("");
     return { handled: true, state: { showThinking: false } };
+  }
+  if (line === "/clear-history") {
+    deps.clearHistory();
+    renderMutedInfo("Session history cleared. Starting fresh.");
+    console.log("");
+    return { handled: true };
   }
   if (line === "/clear") {
     console.clear();
