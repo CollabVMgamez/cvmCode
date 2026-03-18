@@ -1,4 +1,4 @@
-import { AgentTurnResult, AppConfig, ChatMessage, ProviderModelListResult } from "../types.js";
+import { AgentTurnResult, AppConfig, ChatMessage, ProviderModelListResult, TokenUsage } from "../types.js";
 import { classifyProviderFailure, ProviderRequestError } from "./errors.js";
 import { agentToolDefinitions, executeAgentTool } from "../tools/agent-tools.js";
 import {
@@ -94,6 +94,55 @@ async function postJson(
     retryable: false,
     suggestions: ["Run `cvmCode doctor` to inspect your provider settings."]
   });
+}
+
+function extractUsage(response: Record<string, unknown>): TokenUsage | undefined {
+  const usage = typeof response.usage === "object" && response.usage !== null ? response.usage as Record<string, unknown> : null;
+  if (!usage) {
+    return undefined;
+  }
+
+  const inputTokens =
+    typeof usage.prompt_tokens === "number"
+      ? usage.prompt_tokens
+      : typeof usage.input_tokens === "number"
+        ? usage.input_tokens
+        : undefined;
+  const outputTokens =
+    typeof usage.completion_tokens === "number"
+      ? usage.completion_tokens
+      : typeof usage.output_tokens === "number"
+        ? usage.output_tokens
+        : undefined;
+  const totalTokens = typeof usage.total_tokens === "number" ? usage.total_tokens : undefined;
+
+  if (
+    typeof inputTokens !== "number" &&
+    typeof outputTokens !== "number" &&
+    typeof totalTokens !== "number"
+  ) {
+    return undefined;
+  }
+
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens: totalTokens ?? [inputTokens, outputTokens].every((value) => typeof value === "number")
+      ? (inputTokens ?? 0) + (outputTokens ?? 0)
+      : undefined
+  };
+}
+
+function mergeUsage(left?: TokenUsage, right?: TokenUsage): TokenUsage | undefined {
+  if (!left && !right) {
+    return undefined;
+  }
+
+  return {
+    inputTokens: (left?.inputTokens ?? 0) + (right?.inputTokens ?? 0) || undefined,
+    outputTokens: (left?.outputTokens ?? 0) + (right?.outputTokens ?? 0) || undefined,
+    totalTokens: (left?.totalTokens ?? 0) + (right?.totalTokens ?? 0) || undefined
+  };
 }
 
 function mapHistoryToResponsesInput(history: ChatMessage[]) {
@@ -215,13 +264,15 @@ async function runResponsesTurn(input: {
       return {
         text: extractResponsesText(response),
         usedTools: false,
-        thinking: extractResponsesThinking(response)
+        thinking: extractResponsesThinking(response),
+        usage: extractUsage(response)
       };
     }
     throw error;
   }
 
   let usedTools = false;
+  let usage = extractUsage(response);
   for (let loop = 0; loop < 8; loop += 1) {
     const functionCalls = extractResponsesFunctionCalls(response);
     if (functionCalls.length === 0) {
@@ -241,7 +292,7 @@ async function runResponsesTurn(input: {
           forceToolRetry: true
         });
       }
-      return { text, usedTools, thinking };
+      return { text, usedTools, thinking, usage };
     }
 
     const priorOutput = Array.isArray(response.output) ? response.output : [];
@@ -262,12 +313,14 @@ async function runResponsesTurn(input: {
       input: [...priorOutput, ...toolOutputs],
       tools: agentToolDefinitions
     });
+    usage = mergeUsage(usage, extractUsage(response));
   }
 
   return {
     text: extractResponsesText(response),
     usedTools,
-    thinking: extractResponsesThinking(response)
+    thinking: extractResponsesThinking(response),
+    usage
   };
 }
 
@@ -345,6 +398,7 @@ async function runChatCompletionsTurn(input: {
       }))
   ];
   let usedTools = false;
+  let usage: TokenUsage | undefined;
 
   for (let loop = 0; loop < 8; loop += 1) {
     let response: Record<string, unknown>;
@@ -355,6 +409,7 @@ async function runChatCompletionsTurn(input: {
         tools: toChatTools(),
         tool_choice: "auto"
       });
+      usage = mergeUsage(usage, extractUsage(response));
     } catch (error) {
       if (error instanceof ProviderRequestError && error.details.kind === "tool_unsupported") {
         if (toolRequired) {
@@ -364,6 +419,7 @@ async function runChatCompletionsTurn(input: {
           model: activeProvider(input.config).model,
           messages
         });
+        usage = mergeUsage(usage, extractUsage(response));
         const fallbackMessage = extractChatCompletionMessage(response);
         return {
           text:
@@ -371,7 +427,8 @@ async function runChatCompletionsTurn(input: {
               ? fallbackMessage.content.trim()
               : "",
           usedTools: false,
-          thinking: extractChatCompletionThinking(fallbackMessage)
+          thinking: extractChatCompletionThinking(fallbackMessage),
+          usage
         };
       }
       throw error;
@@ -403,7 +460,8 @@ async function runChatCompletionsTurn(input: {
       return {
         text,
         usedTools,
-        thinking
+        thinking,
+        usage
       };
     }
 
@@ -428,7 +486,7 @@ async function runChatCompletionsTurn(input: {
     }
   }
 
-  return { text: "", usedTools };
+  return { text: "", usedTools, usage };
 }
 
 export async function runAgentTurn(input: {

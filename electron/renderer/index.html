@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>cvmCode</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">✦</div>
+          <div class="brand-text">
+            <h1>cvmCode</h1>
+            <p class="brand-version" id="app-version">v1.0.2</p>
+          </div>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="sidebar-card" id="provider-card">
+            <span class="label">Provider</span>
+            <strong id="provider-name">Loading…</strong>
+            <span class="muted" id="provider-model"></span>
+          </div>
+
+          <div class="sidebar-card">
+            <span class="label">Endpoint</span>
+            <strong id="provider-endpoint">—</strong>
+          </div>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="sidebar-card">
+            <span class="label">Session tokens</span>
+            <strong id="usage-total">0</strong>
+            <span class="muted" id="usage-breakdown">in 0 · out 0</span>
+          </div>
+        </div>
+
+        <div class="sidebar-footer">
+          <button class="btn-ghost" id="btn-clear">Clear chat</button>
+        </div>
+      </aside>
+
+      <main class="main-view">
+        <div class="chat-header">
+          <span class="chat-header-title">Chat</span>
+          <span class="chat-status" id="chat-status">Ready</span>
+        </div>
+
+        <div class="messages" id="messages">
+          <div class="welcome-msg">
+            <div class="welcome-icon">✦</div>
+            <p>Ask cvmCode anything about your code.</p>
+          </div>
+        </div>
+
+        <div class="input-area">
+          <textarea
+            id="chat-input"
+            placeholder="Ask anything…"
+            rows="1"
+          ></textarea>
+          <button id="send-btn" class="btn-send">
+            <span id="send-icon">↑</span>
+          </button>
+        </div>
+      </main>
+
+    </div>
+    <script type="module" src="./renderer.js"></script>
+  </body>
+</html>

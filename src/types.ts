@@ -51,8 +51,15 @@ export interface ProviderModelListResult {
   source: "remote" | "manual";
 }
 
+export interface TokenUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+}
+
 export interface AgentTurnResult {
   text: string;
   usedTools: boolean;
   thinking?: string;
+  usage?: TokenUsage;
 }

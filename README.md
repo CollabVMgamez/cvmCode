@@ -1,31 +1,120 @@
-# cvmCode v1.0
+# cvmCode 
 
-cvmCode is a terminal coding assistant focused on fast setup, multi-provider support, and a chat-first workflow for real repositories.
+cvmCode is a coding assistant for your terminal and desktop. It connects to any OpenAI-compatible provider, has a guided first-run setup, and ships with a built-in Electron GUI.
 
-## Why cvmCode
+## Quick start
 
-- clean terminal UI
-- automatic first-run onboarding
-- preset providers for popular AI platforms
-- model picker using [`/v1/models`](src/provider/openai-compatible.ts:365) when available
-- fallback to manual model entry when providers do not expose a model list
-- chat-first workflow with live provider/model switching
-- repository-aware prompting
+### Run from source
 
-## Features
+```bash
+pnpm install
+pnpm build
+pnpm dev
+```
 
-- first-run setup with a more decorative onboarding flow in [`ensureFirstRunSetup()`](src/bootstrap/first-run.ts:153)
-- preset provider catalog in [`PROVIDER_PRESETS`](src/provider/presets.ts:10)
-- OpenAI-compatible provider support
-- filterable model selection in chat via [`chooseModelInteractively()`](src/chat/repl.ts:59)
-- richer provider creation flow inside chat via [`createProviderInteractively()`](src/chat/repl.ts:107)
-- switch providers and models from inside chat
-- built-in config doctor command
-- Windows and shell installers via [`install.bat`](install.bat), [`install.cmd`](install.cmd), [`install.sh`](install.sh), and [`scripts/uninstall.sh`](scripts/uninstall.sh)
+### Or run the built CLI
 
-## Included preset providers
+```bash
+node dist/cli/index.js
+```
 
-Current presets are defined in [`src/provider/presets.ts`](src/provider/presets.ts) and include:
+On first launch, a setup wizard runs automatically. Choose a provider, enter your API key or env var name, and pick a model.
+
+## Install globally
+
+### Windows — `install.cmd` or `install.bat`
+
+```bat
+install.cmd
+```
+
+Installs to `%LOCALAPPDATA%\cvmCode` and adds `cvmCode.cmd` to `%USERPROFILE%\.cvmcode\bin`. Open a new terminal and run `cvmCode`.
+
+### Linux / macOS — `install.sh`
+
+```sh
+sh ./install.sh
+```
+
+Installs to `~/.local/share/cvmCode` and creates launchers in `~/.local/bin`. Open a new terminal and run `cvmCode`.
+
+### Uninstall
+
+```sh
+sh ./scripts/uninstall.sh
+```
+
+## Usage
+
+### Startup mode
+
+When you run `cvmCode` with no arguments, it asks you to choose between:
+
+- **CLI chat** — terminal chat interface
+- **GUI preview** — Electron desktop window
+
+You can also pass a subcommand directly:
+
+```bash
+cvmCode chat     # CLI chat mode
+cvmCode gui      # open the GUI
+cvmCode init     # re-run first-run setup
+cvmCode config   # print saved config
+cvmCode doctor   # show provider diagnostics
+```
+
+## CLI chat commands
+
+Inside the CLI chat interface:
+
+| Command | What it does |
+|---|---|
+| `/help` | Show all commands |
+| `/provider` | Switch or add a provider |
+| `/model` | Switch model |
+| `/models` | List available models |
+| `/endpoint` | Switch between `responses` and `chat-completions` |
+| `/config` | Show current config |
+| `/doctor` | Show provider health info |
+| `/context` | Adjust context window (file count, snippet count, size, root) |
+| `/showthink` | Show provider reasoning when available |
+| `/hidethink` | Hide reasoning panels |
+| `/add-provider` | Add a new provider |
+| `/remove-provider` | Remove a provider |
+| `/rename-provider` | Rename a provider |
+| `/baseurl` | Change the active provider's base URL |
+| `/apikey` | Change auth mode (env var, inline, or clear) |
+| `/headers` | Set custom request headers |
+| `/clear` | Clear the screen and redraw the header |
+| `/exit` | Quit |
+
+## Token usage
+
+After each reply, cvmCode shows token counts when the provider returns usage data:
+
+```
+  tokens · in 512 · out 1024 · total 1536
+```
+
+Cost tracking is not implemented yet.
+
+## GUI
+
+The Electron GUI opens from `cvmCode gui` or the startup mode selector.
+
+Features:
+- Full chat workspace with styled message bubbles
+- Code block rendering in assistant messages
+- Session token count in the sidebar
+- Active provider, model, and endpoint displayed
+- Clear chat button
+- Shift+Enter for multiline input
+
+The GUI calls the same provider backend as the CLI using IPC.
+
+## Preset providers
+
+Providers shipped in [`src/provider/presets.ts`](src/provider/presets.ts):
 
 - OpenAI
 - Together AI
@@ -34,152 +123,31 @@ Current presets are defined in [`src/provider/presets.ts`](src/provider/presets.
 - DeepSeek
 - xAI
 - Anthropic
-- Alibaba Cloud
+- Alibaba Cloud (Qwen)
 - OpenRouter
 - Mistral
 - Fireworks AI
 - Perplexity
 
-## Quick start
+## Config
 
-### Run in development
-
-```bash
-pnpm install
-pnpm build
-pnpm test
-pnpm dev
-```
-
-### Run the built CLI directly
-
-```bash
-node dist/cli/index.js
-```
-
-### Main commands
-
-```bash
-cvmCode
-cvmCode chat
-cvmCode init
-cvmCode config
-cvmCode doctor
-```
-
-## Install
-
-### Windows
-
-Run either [`install.cmd`](install.cmd) or [`install.bat`](install.bat) from the repo root:
-
-```bat
-install.cmd
-```
-
-or
-
-```bat
-install.bat
-```
-
-This installer will:
-
-- install dependencies if needed
-- build cvmCode
-- copy the runtime into `%LOCALAPPDATA%\cvmCode`
-- create `cvmCode.cmd` and `cvmcode.cmd` shims in `%USERPROFILE%\.cvmcode\bin`
-- add the bin directory to your user `PATH`
-
-After install, open a new terminal and run:
-
-```bat
-cvmCode
-```
-
-### Linux / macOS / shell environments
-
-Use [`install.sh`](install.sh):
-
-```sh
-sh ./install.sh
-```
-
-To remove a shell install later:
-
-```sh
-sh ./scripts/uninstall.sh
-```
-
-This installer will:
-
-- build the project
-- install runtime files into `~/.local/share/cvmCode`
-- create `cvmCode` and `cvmcode` launchers in `~/.local/bin`
-- print a `PATH` hint if `~/.local/bin` is not already available
-
-After install, open a new terminal and run:
-
-```sh
-cvmCode
-```
-
-## First-run experience
-
-On first launch, cvmCode will:
-
-1. show a styled onboarding screen
-2. let you choose a default provider
-3. let you include multiple preset providers in your config
-4. let you decide whether the default provider should use an environment variable or a pasted API key
-5. fetch models from the provider when possible
-6. fall back to manual model entry if needed
-
-Config is saved to `~/.cvmcode/config.yaml` on first setup.
-
-## In-chat commands
-
-Inside chat, you can use commands such as:
-
-- `/help`
-- `/provider`
-- `/model`
-- `/models`
-- `/endpoint`
-- `/doctor`
-- `/config`
-- `/add-provider`
-- `/remove-provider`
-- `/rename-provider`
-- `/baseurl`
-- `/apikey`
-- `/headers`
-- `/exit`
-
-The command handling lives in [`startChat()`](src/chat/repl.ts:172).
+Config is stored at `~/.cvmcode/config.yaml`. You can edit it directly or use in-chat commands.
 
 ## Development
 
-Useful commands:
-
 ```bash
 pnpm install
-pnpm build
-pnpm test
-pnpm lint
-pnpm format
+pnpm build     # compile TypeScript
+pnpm test      # run tests
+pnpm dev       # run from source with tsx
+pnpm lint      # lint
+pnpm format    # format with prettier
 ```
 
-Important files:
+## Changelog
 
-- [`src/bootstrap/first-run.ts`](src/bootstrap/first-run.ts)
-- [`src/provider/presets.ts`](src/provider/presets.ts)
-- [`src/provider/openai-compatible.ts`](src/provider/openai-compatible.ts)
-- [`src/chat/repl.ts`](src/chat/repl.ts)
-- [`src/config/store.ts`](src/config/store.ts)
-- [`src/ui/tui.ts`](src/ui/tui.ts)
-- [`scripts/uninstall.sh`](scripts/uninstall.sh)
+See [`CHANGELOG.md`](CHANGELOG.md).
 
 ## License
 
-This project is licensed under the [`MIT`](LICENSE) license.
+[MIT](LICENSE)

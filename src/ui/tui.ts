@@ -1,6 +1,7 @@
 import os from "node:os";
 import path from "node:path";
 import chalk from "chalk";
+import { TokenUsage } from "../types.js";
 
 type Tone = "cyan" | "green" | "yellow" | "red" | "gray";
 
@@ -93,7 +94,7 @@ export function renderChatIntro(input: {
   console.log(chalk.hex("#7c3aed")(`╭${line}╮`));
   console.log(
     chalk.hex("#7c3aed")("│ ") +
-      fitLine(`${chalk.bold.white("cvmCode")} ${chalk.gray("v1.0")}`, width - 4) +
+      fitLine(`${chalk.bold.white("cvmCode")} ${chalk.gray("v1.0.2")}`, width - 4) +
       chalk.hex("#7c3aed")(" │")
   );
   console.log(
@@ -138,6 +139,25 @@ export function renderCommandPalette(commands: string[]) {
 
 export function renderThinkingPanel(text: string) {
   panel("Model reasoning", text.split("\n"), "yellow");
+  console.log("");
+}
+
+export function renderUsageLine(usage?: TokenUsage) {
+  if (!usage) {
+    return;
+  }
+
+  const parts = [
+    typeof usage.inputTokens === "number" ? `in ${usage.inputTokens}` : null,
+    typeof usage.outputTokens === "number" ? `out ${usage.outputTokens}` : null,
+    typeof usage.totalTokens === "number" ? `total ${usage.totalTokens}` : null
+  ].filter((value): value is string => Boolean(value));
+
+  if (parts.length === 0) {
+    return;
+  }
+
+  console.log(chalk.gray(`  tokens · ${parts.join(" · ")}`));
   console.log("");
 }
 
