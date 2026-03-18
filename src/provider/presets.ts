@@ -17,7 +17,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
       endpointMode: "responses",
       baseURL: "https://api.openai.com/v1",
       apiKeyEnv: "OPENAI_API_KEY",
-      model: "gpt-4.1"
+      model: "gpt-5.4"
     }
   },
   {
@@ -29,7 +29,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
       endpointMode: "chat-completions",
       baseURL: "https://api.together.xyz/v1",
       apiKeyEnv: "TOGETHER_API_KEY",
-      model: "meta-llama/Llama-3.3-70B-Instruct-Turbo"
+      model: "zai-org/GLM-5"
     }
   },
   {
@@ -53,7 +53,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
       endpointMode: "chat-completions",
       baseURL: "https://api.cerebras.ai/v1",
       apiKeyEnv: "CEREBRAS_API_KEY",
-      model: "gpt-oss-120b"
+      model: "zai-glm-4.7"
     }
   },
   {
@@ -104,7 +104,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
       endpointMode: "chat-completions",
       baseURL: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
       apiKeyEnv: "ALIBABA_CLOUD_API_KEY",
-      model: "qwen-flash"
+      model: "qwen-plus"
     }
   },
   {
@@ -116,7 +116,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
       endpointMode: "chat-completions",
       baseURL: "https://openrouter.ai/api/v1",
       apiKeyEnv: "OPENROUTER_API_KEY",
-      model: "openai/gpt-4.1-mini",
+      model: "openai/gpt-5.4",
       headers: {
         "HTTP-Referer": "https://github.com/CollabVMGamez/cvmCode",
         "X-Title": "cvmCode"
