@@ -17,9 +17,11 @@ cvmCode is a terminal coding assistant focused on fast setup, multi-provider sup
 - first-run setup with a more decorative onboarding flow in [`ensureFirstRunSetup()`](src/bootstrap/first-run.ts:153)
 - preset provider catalog in [`PROVIDER_PRESETS`](src/provider/presets.ts:10)
 - OpenAI-compatible provider support
+- filterable model selection in chat via [`chooseModelInteractively()`](src/chat/repl.ts:59)
+- richer provider creation flow inside chat via [`createProviderInteractively()`](src/chat/repl.ts:107)
 - switch providers and models from inside chat
 - built-in config doctor command
-- Windows and shell installers via [`install.bat`](install.bat), [`install.cmd`](install.cmd), and [`install.sh`](install.sh)
+- Windows and shell installers via [`install.bat`](install.bat), [`install.cmd`](install.cmd), [`install.sh`](install.sh), and [`scripts/uninstall.sh`](scripts/uninstall.sh)
 
 ## Included preset providers
 
@@ -103,6 +105,12 @@ Use [`install.sh`](install.sh):
 sh ./install.sh
 ```
 
+To remove a shell install later:
+
+```sh
+sh ./scripts/uninstall.sh
+```
+
 This installer will:
 
 - build the project
@@ -148,7 +156,7 @@ Inside chat, you can use commands such as:
 - `/headers`
 - `/exit`
 
-The command handling lives in [`startChat()`](src/chat/repl.ts:42).
+The command handling lives in [`startChat()`](src/chat/repl.ts:172).
 
 ## Development
 
@@ -170,6 +178,7 @@ Important files:
 - [`src/chat/repl.ts`](src/chat/repl.ts)
 - [`src/config/store.ts`](src/config/store.ts)
 - [`src/ui/tui.ts`](src/ui/tui.ts)
+- [`scripts/uninstall.sh`](scripts/uninstall.sh)
 
 ## License
 
