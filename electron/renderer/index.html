@@ -5,70 +5,153 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>cvmCode</title>
     <link rel="stylesheet" href="./styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   </head>
   <body>
     <div class="app-shell">
-
       <aside class="sidebar">
-        <div class="brand">
-          <div class="brand-mark">✦</div>
-          <div class="brand-text">
-            <h1>cvmCode</h1>
-            <p class="brand-version" id="app-version">v1.0.2</p>
+        <div class="brand-row">
+          <div class="brand">
+            <div class="brand-icon">CV</div>
+            <span class="brand-name">cvmCode</span>
           </div>
+          <button id="theme-toggle" class="icon-button" type="button" aria-label="Toggle theme">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="5"/>
+              <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+            </svg>
+          </button>
         </div>
 
-        <div class="sidebar-section">
-          <div class="sidebar-card" id="provider-card">
-            <span class="label">Provider</span>
-            <strong id="provider-name">Loading…</strong>
-            <span class="muted" id="provider-model"></span>
+        <div class="panel">
+          <div class="section-head">
+            <span>Chats</span>
+            <button id="btn-new-chat" class="text-button" type="button">+ New</button>
           </div>
-
-          <div class="sidebar-card">
-            <span class="label">Endpoint</span>
-            <strong id="provider-endpoint">—</strong>
-          </div>
+          <div id="chat-list" class="chat-list"></div>
         </div>
 
-        <div class="sidebar-section">
-          <div class="sidebar-card">
-            <span class="label">Session tokens</span>
-            <strong id="usage-total">0</strong>
-            <span class="muted" id="usage-breakdown">in 0 · out 0</span>
+        <div class="panel">
+          <div class="section-head">
+            <span>Repository</span>
+            <button id="btn-add-repo" class="text-button" type="button">+ Add</button>
           </div>
-        </div>
-
-        <div class="sidebar-footer">
-          <button class="btn-ghost" id="btn-clear">Clear chat</button>
+          <select id="repo-select">
+            <option value="">No repo selected</option>
+          </select>
         </div>
       </aside>
 
       <main class="main-view">
-        <div class="chat-header">
-          <span class="chat-header-title">Chat</span>
-          <span class="chat-status" id="chat-status">Ready</span>
-        </div>
+        <header class="topbar">
+          <div class="topbar-left">
+            <div>
+              <p class="eyebrow">Current chat</p>
+              <h2 id="chat-title" class="chat-title">New conversation</h2>
+            </div>
+          </div>
+          <div class="topbar-meta">
+            <div class="usage-block">
+              <strong id="usage-total">0 tokens</strong>
+              <span id="usage-breakdown">in · out</span>
+            </div>
+            <span id="chat-status" class="status-pill">Ready</span>
+          </div>
+        </header>
 
-        <div class="messages" id="messages">
-          <div class="welcome-msg">
-            <div class="welcome-icon">✦</div>
-            <p>Ask cvmCode anything about your code.</p>
+        <section id="messages" class="messages">
+          <div class="empty-state">
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom: 16px; opacity: 0.5;">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+            <h3>Start a conversation</h3>
+            <p>Select a repository and ask questions about your code.<br/>The AI will help you understand, modify, and build.</p>
+          </div>
+        </section>
+
+        <footer class="composer">
+          <textarea id="chat-input" rows="1" placeholder="Ask anything about your code..."></textarea>
+          <button id="send-btn" class="primary-button" type="button">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+            </svg>
+          </button>
+        </footer>
+      </main>
+
+      <aside class="sidebar right">
+        <div class="panel">
+          <div class="section-head">
+            <span>Provider</span>
+            <button id="btn-refresh-models" class="text-button" type="button">↻</button>
+          </div>
+          <div class="field">
+            <span>Model</span>
+            <select id="provider-select"></select>
+          </div>
+          <div class="field">
+            <span>Model variant</span>
+            <div class="row">
+              <select id="model-select"></select>
+              <button id="btn-save-model" class="text-button" type="button">Save</button>
+            </div>
+          </div>
+          <div class="meta-grid">
+            <div>
+              <span>Endpoint</span>
+              <strong id="provider-endpoint">-</strong>
+            </div>
+            <div>
+              <span>Base URL</span>
+              <strong id="provider-model">-</strong>
+            </div>
           </div>
         </div>
 
-        <div class="input-area">
-          <textarea
-            id="chat-input"
-            placeholder="Ask anything…"
-            rows="1"
-          ></textarea>
-          <button id="send-btn" class="btn-send">
-            <span id="send-icon">↑</span>
+        <div class="panel">
+          <div class="section-head">
+            <span>Create Provider</span>
+          </div>
+          <div class="field-list">
+            <div class="field">
+              <span>Name</span>
+              <input id="provider-name-input" type="text" placeholder="my-provider" />
+            </div>
+            <div class="field">
+              <span>Base URL</span>
+              <input id="provider-base-url-input" type="text" placeholder="https://api.openai.com/v1" />
+            </div>
+            <div class="field">
+              <span>API Key (env var)</span>
+              <input id="provider-api-key-env-input" type="text" placeholder="OPENAI_API_KEY" />
+            </div>
+            <div class="field">
+              <span>API Key (direct)</span>
+              <input id="provider-api-key-input" type="password" placeholder="sk-..." />
+            </div>
+            <div class="field">
+              <span>Default Model</span>
+              <input id="provider-default-model-input" type="text" placeholder="gpt-4.1" />
+            </div>
+            <div class="field">
+              <span>Endpoint Mode</span>
+              <select id="provider-endpoint-input">
+                <option value="responses">Responses API</option>
+                <option value="chat-completions">Chat Completions</option>
+              </select>
+            </div>
+          </div>
+          <button id="btn-create-provider" class="primary-button" type="button" style="width: 100%; margin-top: 12px;">
+            Create Provider
           </button>
         </div>
-      </main>
 
+        <div class="panel">
+          <button id="btn-clear" class="ghost-button" type="button">Clear conversation</button>
+        </div>
+      </aside>
     </div>
     <script type="module" src="./renderer.js"></script>
   </body>

@@ -1,3 +1,46 @@
 {
-  "type": "commonjs"
+  "name": "cvmcode",
+  "version": "1.0.2",
+  "description": "cvmCode: terminal coding assistant",
+  "main": "main.js",
+  "author": "cvmCode",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^41.0.3",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.cvmcode.app",
+    "productName": "cvmCode",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../dist",
+        "to": "dist",
+        "filter": ["**/*"]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
 }
