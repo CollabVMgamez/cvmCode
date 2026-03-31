@@ -142,6 +142,20 @@ export function renderThinkingPanel(text: string) {
   console.log("");
 }
 
+export function renderToolCalls(toolCalls: Array<{ name: string; arguments: string }>) {
+  if (toolCalls.length === 0) {
+    return;
+  }
+  console.log(chalk.gray("  Tools used:"));
+  for (let i = 0; i < toolCalls.length; i++) {
+    const call = toolCalls[i];
+    if (!call) continue;
+    const prefix = i === toolCalls.length - 1 ? "  └─" : "  ├─";
+    const args = call.arguments.length > 80 ? call.arguments.slice(0, 80) + "…" : call.arguments;
+    console.log(chalk.gray(prefix), chalk.yellow(call.name), chalk.gray("("), chalk.white(args), chalk.gray(")"));
+  }
+}
+
 export function renderUsageLine(usage?: TokenUsage) {
   if (!usage) {
     return;

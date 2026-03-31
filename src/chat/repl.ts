@@ -12,6 +12,7 @@ import { composeSystemPrompt } from "../prompt/compose.js";
 import { ProviderRequestError, renderProviderFailure } from "../provider/errors.js";
 import { summarizeRepository } from "../repo/context.js";
 import { runAgentTurn } from "../provider/openai-compatible.js";
+import { runAgentTurn as runAnthropicTurn } from "../provider/anthropic.js";
 import { ChatMessage } from "../types.js";
 import {
   renderChatIntro,
@@ -23,9 +24,9 @@ import {
   renderStreamingEnd,
   renderStreamingStart,
   renderThinkingPanel,
+  renderToolCalls,
   renderUsageLine,
-  renderUserMessage,
-  withThinking
+  renderUserMessage
 } from "../ui/tui.js";
 
 const MAX_HISTORY_TURNS = 40;
@@ -178,22 +179,27 @@ export async function startChat(cwd: string): Promise<void> {
     try {
       instructions = composeSystemPrompt(repo);
       history[0] = { role: "system", content: instructions };
-      const result = await withThinking(
-        showThinking ? "Thinking (reasoning capture enabled)" : "Thinking",
-        runAgentTurn({
-          config,
-          instructions,
-          history,
-          cwd: repo.root
-        })
-      );
+      renderStreamingStart();
+      const runTurn = provider?.type === "anthropic" ? runAnthropicTurn : runAgentTurn;
+      const result = await runTurn({
+        config,
+        instructions,
+        history,
+        cwd: repo.root,
+        stream: {
+          onTextDelta(delta) {
+            renderStreamingChunk(delta);
+          }
+        }
+      });
       history.push({ role: "assistant", content: result.text });
       trimHistory(history);
+      if (result.toolCalls && result.toolCalls.length > 0) {
+        renderToolCalls(result.toolCalls);
+      }
       if (showThinking && result.thinking) {
         renderThinkingPanel(result.thinking);
       }
-      renderStreamingStart();
-      renderStreamingChunk(result.text);
       renderStreamingEnd();
       renderUsageLine(result.usage);
       if (sessionChangeCount > 0) {

@@ -83,13 +83,12 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
   {
     name: "anthropic",
     label: "Anthropic",
-    description: "Claude via Anthropic-compatible gateway settings",
+    description: "Claude via Anthropic Messages API",
     provider: {
-      type: "openai-compatible",
-      endpointMode: "chat-completions",
-      baseURL: "https://api.anthropic.com/v1",
+      type: "anthropic",
+      baseURL: "https://api.anthropic.com",
       apiKeyEnv: "ANTHROPIC_API_KEY",
-      model: "claude-sonnet-4-6",
+      model: "claude-sonnet-4-20250514",
       headers: {
         "anthropic-version": "2023-06-01"
       }

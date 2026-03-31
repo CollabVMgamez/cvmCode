@@ -1,6 +1,10 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import fg from "fast-glob";
+import { exec } from "node:child_process";
+import { promisify } from "node:util";
+
+const execAsync = promisify(exec);
 
 type ToolArgs = Record<string, unknown>;
 
@@ -97,6 +101,40 @@ async function searchFilesTool(context: AgentToolContext, args: ToolArgs) {
   return { query, results };
 }
 
+async function runCommandTool(context: AgentToolContext, args: ToolArgs) {
+  const command = typeof args.command === "string" ? args.command : "";
+  if (!command) {
+    throw new Error("Missing command.");
+  }
+  const absolute = path.resolve(context.cwd);
+  try {
+    const { stdout, stderr } = await execAsync(command, {
+      cwd: absolute,
+      timeout: 60000,
+      maxBuffer: 1024 * 1024
+    });
+    return { stdout: stdout.slice(0, 50000), stderr: stderr.slice(0, 50000), exitCode: 0 };
+  } catch (error: unknown) {
+    const err = error as { stdout?: string; stderr?: string; code?: number };
+    return {
+      stdout: err.stdout?.slice(0, 50000) ?? "",
+      stderr: err.stderr?.slice(0, 50000) ?? "",
+      exitCode: err.code ?? 1
+    };
+  }
+}
+
+async function webSearchTool(_context: AgentToolContext, args: ToolArgs) {
+  const query = typeof args.query === "string" ? args.query : "";
+  if (!query) {
+    throw new Error("Missing query.");
+  }
+  const url = `https://ddg-api.vercel.app/search?q=${encodeURIComponent(query)}&format=json`;
+  const response = await fetch(url);
+  const data = (await response.json()) as Array<{ title: string; url: string; snippet: string }>;
+  return { results: data.slice(0, 10) };
+}
+
 const toolHandlers: Record<
   string,
   (context: AgentToolContext, args: ToolArgs) => Promise<unknown>
@@ -104,7 +142,9 @@ const toolHandlers: Record<
   list_files: listFiles,
   read_file: readFileTool,
   write_file: writeFileTool,
-  search_files: searchFilesTool
+  search_files: searchFilesTool,
+  run_command: runCommandTool,
+  web_search: webSearchTool
 };
 
 export const agentToolDefinitions: AgentToolDefinition[] = [
@@ -155,6 +195,34 @@ export const agentToolDefinitions: AgentToolDefinition[] = [
     type: "function",
     name: "search_files",
     description: "Search workspace text files for a string and return matching lines.",
+    strict: true,
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string" }
+      },
+      required: ["query"],
+      additionalProperties: false
+    }
+  },
+  {
+    type: "function",
+    name: "run_command",
+    description: "Run a shell command in the workspace and return its output.",
+    strict: true,
+    parameters: {
+      type: "object",
+      properties: {
+        command: { type: "string" }
+      },
+      required: ["command"],
+      additionalProperties: false
+    }
+  },
+  {
+    type: "function",
+    name: "web_search",
+    description: "Search the web and return results with snippets.",
     strict: true,
     parameters: {
       type: "object",

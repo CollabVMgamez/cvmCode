@@ -1,4 +1,11 @@
-import { AgentTurnResult, AppConfig, ChatMessage, ProviderModelListResult, TokenUsage } from "../types.js";
+import {
+  AgentTurnResult,
+  AgentTurnStreamHandlers,
+  AppConfig,
+  ChatMessage,
+  ProviderModelListResult,
+  TokenUsage
+} from "../types.js";
 import { classifyProviderFailure, ProviderRequestError } from "./errors.js";
 import { agentToolDefinitions, executeAgentTool } from "../tools/agent-tools.js";
 import {
@@ -124,6 +131,156 @@ async function postJson(
     kind: "unknown",
     title: "Provider request failed",
     detail: "The request failed after multiple attempts.",
+    retryable: false,
+    suggestions: ["Run `cvmCode doctor` to inspect your provider settings."]
+  });
+}
+
+async function postStream(
+  config: AppConfig,
+  endpoint: string,
+  body: Record<string, unknown>,
+  onEvent: (eventName: string | undefined, payload: Record<string, unknown>) => void
+): Promise<void> {
+  const provider = activeProvider(config);
+  const url = `${provider.baseURL.replace(/\/$/, "")}${endpoint}`;
+
+  for (let attempt = 0; attempt < MAX_RETRY_ATTEMPTS; attempt += 1) {
+    let httpResponse: Response | undefined;
+    try {
+      httpResponse = await fetch(url, {
+        method: "POST",
+        headers: {
+          ...createHeaders(config),
+          Accept: "text/event-stream"
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(120000)
+      });
+
+      if (!httpResponse.ok) {
+        const text = await httpResponse.text();
+        const details = classifyProviderFailure({
+          status: httpResponse.status,
+          statusText: httpResponse.statusText,
+          body: text
+        });
+        if (details.retryable && attempt < MAX_RETRY_ATTEMPTS - 1) {
+          const delay = backoffDelay(attempt, parseRetryAfterMs(httpResponse));
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          continue;
+        }
+        throw new ProviderRequestError(details.title, details);
+      }
+
+      if (!httpResponse.body) {
+        throw new ProviderRequestError("Streaming response body missing", {
+          kind: "server",
+          title: "Streaming response body missing",
+          detail: "The provider accepted the request but did not return a stream body.",
+          retryable: false,
+          suggestions: [
+            "Switch to a different provider or endpoint mode.",
+            "Retry the request to see if the provider supports SSE for this model."
+          ]
+        });
+      }
+
+      const reader = httpResponse.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let eventName: string | undefined;
+      let dataLines: string[] = [];
+
+      const flushEvent = () => {
+        if (dataLines.length === 0) {
+          eventName = undefined;
+          return;
+        }
+
+        const data = dataLines.join("\n").trim();
+        dataLines = [];
+        const currentEvent = eventName;
+        eventName = undefined;
+
+        if (!data || data === "[DONE]") {
+          return;
+        }
+
+        try {
+          onEvent(currentEvent, JSON.parse(data) as Record<string, unknown>);
+        } catch {
+          // Ignore malformed SSE frames and keep consuming the stream.
+        }
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          buffer += decoder.decode();
+          break;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+        const normalized = buffer.replace(/\r\n/g, "\n");
+        const lines = normalized.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line) {
+            flushEvent();
+            continue;
+          }
+          if (line.startsWith(":")) {
+            continue;
+          }
+          if (line.startsWith("event:")) {
+            eventName = line.slice(6).trim();
+            continue;
+          }
+          if (line.startsWith("data:")) {
+            dataLines.push(line.slice(5).trimStart());
+          }
+        }
+      }
+
+      if (buffer.trim()) {
+        const trailingLines = buffer.replace(/\r\n/g, "\n").split("\n");
+        for (const line of trailingLines) {
+          if (!line) {
+            flushEvent();
+            continue;
+          }
+          if (line.startsWith("event:")) {
+            eventName = line.slice(6).trim();
+            continue;
+          }
+          if (line.startsWith("data:")) {
+            dataLines.push(line.slice(5).trimStart());
+          }
+        }
+      }
+
+      flushEvent();
+      return;
+    } catch (error) {
+      if (error instanceof ProviderRequestError) {
+        throw error;
+      }
+      const details = classifyProviderFailure({ error });
+      if (details.retryable && attempt < MAX_RETRY_ATTEMPTS - 1) {
+        const delay = backoffDelay(attempt);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        continue;
+      }
+      throw new ProviderRequestError(details.title, details);
+    }
+  }
+
+  throw new ProviderRequestError("Provider stream failed", {
+    kind: "unknown",
+    title: "Provider stream failed",
+    detail: "The streaming request failed after multiple attempts.",
     retryable: false,
     suggestions: ["Run `cvmCode doctor` to inspect your provider settings."]
   });
@@ -273,17 +430,50 @@ async function runResponsesTurn(input: {
   history: ChatMessage[];
   cwd: string;
   forceToolRetry?: boolean;
+  stream?: AgentTurnStreamHandlers;
 }): Promise<AgentTurnResult> {
   const lastUserInput = latestUserMessage(input.history);
   const toolRequired = taskLikelyRequiresTools(lastUserInput);
+  const canStream = !toolRequired && typeof input.stream?.onTextDelta === "function";
   let response: Record<string, unknown>;
   try {
-    response = await postJson(input.config, "/responses", {
-      model: activeProvider(input.config).model,
-      instructions: input.instructions,
-      input: mapHistoryToResponsesInput(input.history),
-      tools: agentToolDefinitions
-    });
+    if (canStream) {
+      let streamedText = "";
+      let finalResponse: Record<string, unknown> | undefined;
+      await postStream(
+        input.config,
+        "/responses",
+        {
+          model: activeProvider(input.config).model,
+          instructions: input.instructions,
+          input: mapHistoryToResponsesInput(input.history),
+          stream: true,
+          tools: agentToolDefinitions
+        },
+        (_eventName, payload) => {
+          if (payload.type === "response.output_text.delta" && typeof payload.delta === "string") {
+            streamedText += payload.delta;
+            input.stream?.onTextDelta?.(payload.delta);
+            return;
+          }
+          if (
+            payload.type === "response.completed" &&
+            typeof payload.response === "object" &&
+            payload.response !== null
+          ) {
+            finalResponse = payload.response as Record<string, unknown>;
+          }
+        }
+      );
+      response = finalResponse ?? { output: streamedText ? [{ type: "message", content: [{ type: "output_text", text: streamedText }] }] : [] };
+    } else {
+      response = await postJson(input.config, "/responses", {
+        model: activeProvider(input.config).model,
+        instructions: input.instructions,
+        input: mapHistoryToResponsesInput(input.history),
+        tools: agentToolDefinitions
+      });
+    }
   } catch (error) {
     if (error instanceof ProviderRequestError && error.details.kind === "tool_unsupported") {
       if (toolRequired) {
@@ -306,6 +496,7 @@ async function runResponsesTurn(input: {
 
   let usedTools = false;
   let usage = extractUsage(response);
+  const toolCalls: Array<{ name: string; arguments: string }> = [];
   for (let loop = 0; loop < MAX_TOOL_LOOPS; loop += 1) {
     const functionCalls = extractResponsesFunctionCalls(response);
     if (functionCalls.length === 0) {
@@ -325,13 +516,14 @@ async function runResponsesTurn(input: {
           forceToolRetry: true
         });
       }
-      return { text, usedTools, thinking, usage };
+      return { text, usedTools, thinking, usage, toolCalls };
     }
 
     const priorOutput = Array.isArray(response.output) ? response.output : [];
     const toolOutputs = [];
     usedTools = true;
     for (const call of functionCalls) {
+      toolCalls.push({ name: call.name, arguments: call.arguments });
       const result = await executeAgentTool({ cwd: input.cwd }, call.name, call.arguments);
       toolOutputs.push({
         type: "function_call_output",
@@ -423,9 +615,11 @@ async function runChatCompletionsTurn(input: {
   history: ChatMessage[];
   cwd: string;
   forceToolRetry?: boolean;
+  stream?: AgentTurnStreamHandlers;
 }): Promise<AgentTurnResult> {
   const lastUserInput = latestUserMessage(input.history);
   const toolRequired = taskLikelyRequiresTools(lastUserInput);
+  const canStream = !toolRequired && typeof input.stream?.onTextDelta === "function";
   const messages: Array<Record<string, unknown>> = [
     { role: "system", content: input.instructions },
     ...input.history
@@ -437,16 +631,71 @@ async function runChatCompletionsTurn(input: {
   ];
   let usedTools = false;
   let usage: TokenUsage | undefined;
+  const allToolCalls: Array<{ name: string; arguments: string }> = [];
 
   for (let loop = 0; loop < MAX_TOOL_LOOPS; loop += 1) {
     let response: Record<string, unknown>;
     try {
-      response = await postJson(input.config, "/chat/completions", {
-        model: activeProvider(input.config).model,
-        messages,
-        tools: toChatTools(),
-        tool_choice: "auto"
-      });
+      if (canStream && loop === 0) {
+        let streamedText = "";
+        let streamedUsage: TokenUsage | undefined;
+        await postStream(
+          input.config,
+          "/chat/completions",
+          {
+            model: activeProvider(input.config).model,
+            messages,
+            stream: true,
+            stream_options: { include_usage: true },
+            tools: toChatTools(),
+            tool_choice: "auto"
+          },
+          (_eventName, payload) => {
+            const choices = Array.isArray(payload.choices) ? payload.choices : [];
+            const delta =
+              choices.length > 0 && typeof choices[0] === "object" && choices[0] !== null
+                ? (choices[0] as { delta?: Record<string, unknown> }).delta
+                : undefined;
+
+            if (delta && typeof delta.content === "string") {
+              streamedText += delta.content;
+              input.stream?.onTextDelta?.(delta.content);
+            } else if (delta && Array.isArray(delta.content)) {
+              for (const part of delta.content) {
+                if (
+                  typeof part === "object" &&
+                  part !== null &&
+                  typeof (part as { text?: string }).text === "string"
+                ) {
+                  const text = (part as { text: string }).text;
+                  streamedText += text;
+                  input.stream?.onTextDelta?.(text);
+                }
+              }
+            }
+
+            streamedUsage = mergeUsage(streamedUsage, extractUsage(payload));
+          }
+        );
+
+        response = {
+          choices: [
+            {
+              message: {
+                content: streamedText
+              }
+            }
+          ],
+          usage: streamedUsage
+        };
+      } else {
+        response = await postJson(input.config, "/chat/completions", {
+          model: activeProvider(input.config).model,
+          messages,
+          tools: toChatTools(),
+          tool_choice: "auto"
+        });
+      }
       usage = mergeUsage(usage, extractUsage(response));
     } catch (error) {
       if (error instanceof ProviderRequestError && error.details.kind === "tool_unsupported") {
@@ -499,11 +748,15 @@ async function runChatCompletionsTurn(input: {
         text,
         usedTools,
         thinking,
-        usage
+        usage,
+        toolCalls: allToolCalls
       };
     }
 
     usedTools = true;
+    for (const call of toolCalls) {
+      allToolCalls.push({ name: call.function.name, arguments: call.function.arguments });
+    }
     messages.push({
       role: "assistant",
       content: typeof message.content === "string" ? message.content : "",
@@ -542,6 +795,7 @@ export async function runAgentTurn(input: {
   instructions: string;
   history: ChatMessage[];
   cwd: string;
+  stream?: AgentTurnStreamHandlers;
 }): Promise<AgentTurnResult> {
   const provider = activeProvider(input.config);
   if (provider.endpointMode === "chat-completions") {

@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const providerSettingsSchema = z.object({
-  type: z.literal("openai-compatible"),
+  type: z.union([z.literal("openai-compatible"), z.literal("anthropic")]),
   endpointMode: z.enum(["responses", "chat-completions"]).optional(),
   baseURL: z.string().url(),
   apiKey: z.string().min(1).optional(),

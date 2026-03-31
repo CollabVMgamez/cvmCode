@@ -1,5 +1,5 @@
 export interface ProviderSettings {
-  type: "openai-compatible";
+  type: "openai-compatible" | "anthropic";
   endpointMode?: "responses" | "chat-completions";
   baseURL: string;
   apiKey?: string;
@@ -57,9 +57,20 @@ export interface TokenUsage {
   totalTokens?: number;
 }
 
+export interface AgentToolCall {
+  name: string;
+  arguments: string;
+}
+
 export interface AgentTurnResult {
   text: string;
   usedTools: boolean;
   thinking?: string;
   usage?: TokenUsage;
+  toolCalls?: AgentToolCall[];
+}
+
+export interface AgentTurnStreamHandlers {
+  onTextDelta?: (delta: string) => void;
+  onToolCall?: (toolName: string, toolArgs: string) => void;
 }
